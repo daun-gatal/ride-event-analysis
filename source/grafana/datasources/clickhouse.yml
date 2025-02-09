@@ -1,0 +1,17 @@
+# Configuration file version
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    url: clickhouse
+    orgId: 1
+    jsonData:
+      host: clickhouse
+      database: "default"
+      username: "default"
+      port: 8123
+      protocol: http
+    secureJsonData:
+      password: "default"

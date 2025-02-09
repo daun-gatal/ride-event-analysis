@@ -1,0 +1,123 @@
+version: '3'
+services:
+  kafka-ui:
+    container_name: kafka-ui
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - 8080:8080
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_METRICS_PORT: 9997
+      DYNAMIC_CONFIG_ENABLED: 'true'
+
+  kafka:
+    image: confluentinc/cp-kafka:7.2.1
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "9997:9997"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9997
+      KAFKA_JMX_OPTS: -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=kafka0 -Dcom.sun.management.jmxremote.rmi.port=9997
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    volumes:
+      - ./scripts/kafka/update_run.sh:/tmp/update_run.sh
+    command: "bash -c 'if [ ! -f /tmp/update_run.sh ]; then echo \"ERROR: Did you forget the update_run.sh file that came with this docker-compose.yml file?\" && exit 1 ; else /tmp/update_run.sh && /etc/confluent/docker/run ; fi'"
+
+  kafka-init-topics:
+    image: confluentinc/cp-kafka:7.2.1
+    container_name: kafka-init
+    depends_on:
+      - kafka
+    command: "bash -c 'echo Waiting for Kafka to be ready... && \
+               cub kafka-ready -b kafka:29092 1 30 && \
+               kafka-topics --create --topic flink-source --partitions 3 --replication-factor 1 --if-not-exists --bootstrap-server kafka:29092 && \
+               kafka-topics --create --topic flink-sink --partitions 3 --replication-factor 1 --if-not-exists --bootstrap-server kafka:29092'"
+
+  jobmanager:
+    build: 
+      context: ./consumer/.
+      args:
+        CACHE_BUST: 1
+    depends_on:
+      - kafka
+      - kafka-init-topics
+      - kafka-ui
+    container_name: flink-jobmanager
+    ports:
+      - "8081:8081"
+    command: standalone-job --job-classname com.flink.dev.Main --jars /opt/flink/lib/kafka-1.0-SNAPSHOT.jar
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager     
+        classloader.resolve-order: parent-first   
+
+  taskmanager:
+    build: 
+      context: ./consumer/.
+      args:
+        CACHE_BUST: 1
+    container_name: flink-taskmanager
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    scale: 1
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 1
+        classloader.resolve-order: parent-first
+
+  producer:
+    build: ./source/.
+    container_name: python-producer
+    depends_on:
+      - taskmanager
+
+  clickhouse:
+    image: bitnami/clickhouse:latest
+    container_name: clickhouse
+    depends_on:
+      - taskmanager
+    environment:
+      - ALLOW_EMPTY_PASSWORD=no
+      - CLICKHOUSE_ADMIN_PASSWORD=default
+      - CLICKHOUSE_INITSCRIPTS_DIR=/docker-entrypoint-initdb.d
+    ports:
+      - 8123:8123
+    volumes:
+      - ./.clickhouse/:/bitnami/clickhouse
+      - ./scripts/clickhouse:/docker-entrypoint-initdb.d
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    ports:
+     - 3000:3000
+    container_name: grafana
+    depends_on:
+      - clickhouse
+    volumes:
+      - ./source/grafana:/etc/grafana/provisioning/
+    environment:
+      GF_INSTALL_PLUGINS: "grafana-clickhouse-datasource"
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "admin"

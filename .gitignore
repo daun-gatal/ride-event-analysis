@@ -1,0 +1,6 @@
+.venv
+.vscode
+.clickhouse
+
+target
+dependency-reduced-pom.xml
