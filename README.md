@@ -1,5 +1,9 @@
 # Real-Time Ride Event Processing Pipeline
 
+## Data Flow
+![Data Flow](images/flow.png) 
+
+## Dashboard Layout
 ![Ride Event Analysis Dashboard](images/dashboard.png)
 
 ## Overview
