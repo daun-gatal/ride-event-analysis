@@ -5,7 +5,7 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --no-cache-dir confluent-kafka
+RUN pip install --no-cache-dir confluent-kafka orjson
 
 # Copy the Python script into the container
 COPY producer/producer.py .

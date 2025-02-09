@@ -1,4 +1,5 @@
 DC = docker-compose
+GRAFANA_DASHBOARD_URL = http://localhost:3000/d/cechwucm6imf4f/real-time-dashboard-ride-event-analysis?orgId=1&from=now-30m&to=now&timezone=browser&refresh=5s
 
 .PHONY: up down cleanup
 
@@ -8,6 +9,7 @@ up:
 	chmod +x .clickhouse
 	$(DC) up -d
 	@echo "Services are up and running!"
+	@echo "Access Grafana dashboard at: $(GRAFANA_DASHBOARD_URL)"
 
 down:
 	@echo "Stopping and removing Docker Compose services..."
