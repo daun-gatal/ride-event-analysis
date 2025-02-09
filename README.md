@@ -1,5 +1,7 @@
 # Real-Time Ride Event Processing Pipeline
 
+![Ride Event Analysis Dashboard](images/dashboard.png)
+
 ## Overview
 This project demonstrates a real-time data processing pipeline for ride events using modern data tools. It simulates ride event data ingestion, processes it in real-time, and visualizes key metrics.
 
